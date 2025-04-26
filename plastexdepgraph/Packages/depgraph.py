@@ -76,7 +76,7 @@ def item_kind(node) -> str:
 
 class DepGraph():
     """
-    A TeX declarations dependency graph, built using the `\\uses and `\\proves` commands.
+    A TeX declarations dependency graph, built using the `\\uses`, `\\proves`, and `\\nodetitle` commands.
     """
     def __init__(self):
         self.nodes = set()
@@ -85,6 +85,7 @@ class DepGraph():
         self.document = None
         self._ancestors = dict()
         self._predecessors = dict()
+        self.titles = dict()
 
     def predecessors(self, node):
         """
@@ -123,9 +124,8 @@ class DepGraph():
 
             if fillcolor:
                 style = self.document.userdata['dep_graph'].get('stylerizer', lambda x: 'filled')(node)
-
                 graph.add_node(node.id,
-                               label=node.id.split(':')[-1],
+                               label=node.id.split(':')[-1] if node.id not in self.titles else self.titles[node.id],
                                shape=shapes.get(item_kind(node), 'ellipse'),
                                style=style,
                                color=color,
@@ -133,7 +133,7 @@ class DepGraph():
             else:
                 style = self.document.userdata['dep_graph'].get('stylerizer', lambda x: '')(node)
                 graph.add_node(node.id,
-                               label=node.id.split(':')[-1],
+                               label=node.id.split(':')[-1] if node.id not in self.titles else self.titles[node.id],
                                shape=shapes.get(item_kind(node), 'ellipse'),
                                style=style,
                                color=color)
@@ -180,6 +180,14 @@ class uses(Command):
             node.setUserData('uses', used)
 
         doc.addPostParseCallbacks(10, update_used)
+
+class nodetitle(Command):
+    r"""\nodetitle{title}"""
+    args = 'title:str'
+
+    def digest(self, tokens):
+        Command.digest(self, tokens)
+        self.parentNode.setUserData("title", self.attributes['title'])
 
 class alsoIn(Command):
     r"""\uses{labels list}"""
@@ -299,6 +307,9 @@ def ProcessOptions(options, document):
                 used = proof.userdata.get('uses', [])
                 for thm in used:
                     graph.proof_edges.add((thm, node))
+            title = node.userdata.get('title', None)
+            if title is not None:
+                graph.titles[node.id] = title
 
         graphs = document.userdata['dep_graph'].setdefault('graphs', dict())
         graphs[section] = graph
